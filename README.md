@@ -23,6 +23,77 @@ This project implements an MCP server that enables Claude to connect to ServiceN
 - Debug mode for troubleshooting
 - Support for both stdio and Server-Sent Events (SSE) communication
 
+## Deployment
+
+### Deploy to Render (Free)
+
+The easiest way to deploy the ServiceNow MCP server is using Render's free tier. No credit card required!
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+#### Manual Deployment on Render
+
+1. Fork this repository to your GitHub account
+
+2. Sign up for a free account at [Render.com](https://render.com)
+
+3. Click "New +" and select "Web Service"
+
+4. Connect your GitHub repository
+
+5. Configure the service:
+   - **Name**: `servicenow-mcp`
+   - **Runtime**: `Docker`
+   - **Plan**: `Free`
+
+6. Add environment variables:
+   - `SERVICENOW_INSTANCE_URL`: Your ServiceNow instance URL
+   - `SERVICENOW_USERNAME`: Your ServiceNow username
+   - `SERVICENOW_PASSWORD`: Your ServiceNow password
+   - `SERVICENOW_AUTH_TYPE`: `basic` (or `oauth`, `api_key`)
+   - `MCP_TOOL_PACKAGE`: `full` (loads all 93 tools)
+
+7. Click "Create Web Service"
+
+8. Once deployed, you'll get a URL like: `https://servicenow-mcp-xxxx.onrender.com`
+
+9. Update your Claude Desktop config to use the deployed service:
+   ```json
+   {
+     "mcpServers": {
+       "ServiceNow": {
+         "url": "https://servicenow-mcp-xxxx.onrender.com/sse"
+       }
+     }
+   }
+   ```
+
+**Note**: Free tier services on Render sleep after 15 minutes of inactivity and may take a few seconds to wake up on the first request.
+
+### Docker Deployment
+
+You can also run the ServiceNow MCP server using Docker:
+
+```bash
+docker run -d \
+  -e SERVICENOW_INSTANCE_URL=https://your-instance.service-now.com \
+  -e SERVICENOW_USERNAME=your-username \
+  -e SERVICENOW_PASSWORD=your-password \
+  -e SERVICENOW_AUTH_TYPE=basic \
+  -e MCP_TOOL_PACKAGE=full \
+  -p 8080:8080 \
+  chan4lk/servicenow-mcp:latest
+```
+
+Or using an `.env` file:
+
+```bash
+docker run -d \
+  --env-file .env \
+  -p 8080:8080 \
+  chan4lk/servicenow-mcp:latest
+```
+
 ## Installation
 
 ### Prerequisites

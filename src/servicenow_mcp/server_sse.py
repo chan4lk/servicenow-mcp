@@ -8,21 +8,27 @@ import argparse
 import os
 from typing import Dict, Union
 
+import contextlib
+from collections.abc import AsyncIterator
+
 import uvicorn
 from dotenv import load_dotenv
 from mcp.server import Server
-from mcp.server.fastmcp import FastMCP
 from mcp.server.sse import SseServerTransport
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
+from starlette.types import Receive, Scope, Send
 
 from servicenow_mcp.server import ServiceNowMCP
 from servicenow_mcp.utils.config import AuthConfig, AuthType, BasicAuthConfig, ServerConfig
 
 
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
-    """Create a Starlette application that can serve the provided mcp server with SSE."""
+    """Create a Starlette application that can serve the provided mcp server with SSE and Streamable HTTP."""
+    # SSE transport for legacy support (Claude Desktop)
     sse = SseServerTransport("/messages/")
 
     async def handle_sse(request: Request) -> None:
@@ -37,12 +43,64 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
                 mcp_server.create_initialization_options(),
             )
 
+    # Streamable HTTP manager for Microsoft Copilot Studio
+    session_manager = StreamableHTTPSessionManager(
+        app=mcp_server,
+        event_store=None,
+        json_response=True,
+        stateless=True,
+    )
+
+    # Create a proper ASGI app wrapper for the session manager
+    class StreamableHTTPApp:
+        """ASGI app wrapper for StreamableHTTPSessionManager."""
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            """Handle ASGI requests."""
+            await session_manager.handle_request(scope, receive, send)
+
+    async def handle_mcp_endpoint(scope: Scope, receive: Receive, send: Send) -> None:
+        """Handle both /mcp and /mcp/ paths."""
+        # Normalize path to what session manager expects
+        if scope["path"] == "/mcp":
+            scope = dict(scope)
+            scope["path"] = "/mcp/"
+            scope["raw_path"] = b"/mcp/"
+        await session_manager.handle_request(scope, receive, send)
+
+    async def health_check(request: Request):
+        """Health check endpoint."""
+        return JSONResponse({"status": "healthy", "server": "ServiceNow MCP"})
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: Starlette) -> AsyncIterator[None]:
+        """Context manager for session manager lifecycle."""
+        async with session_manager.run():
+            print("ServiceNow MCP server started with StreamableHTTP support!")
+            try:
+                yield
+            finally:
+                print("ServiceNow MCP server shutting down...")
+
+    # Custom route class that handles both /mcp and /mcp/ without redirecting
+    class MCPRoute:
+        """Custom route handler for MCP endpoints."""
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            """Handle ASGI requests for /mcp paths."""
+            await handle_mcp_endpoint(scope, receive, send)
+
     return Starlette(
         debug=debug,
         routes=[
-            Route("/sse", endpoint=handle_sse),
-            Mount("/messages/", app=sse.handle_post_message),
+            Route("/", endpoint=health_check, methods=["GET"]),
+            Route("/health", endpoint=health_check, methods=["GET"]),
+            Route("/sse", endpoint=handle_sse, methods=["GET"]),
+            Mount("/mcp/", app=StreamableHTTPApp()),  # Handle /mcp/ and sub-paths
+            Route("/mcp", endpoint=MCPRoute(), methods=["GET", "POST"]),  # Handle /mcp without slash
+            Mount("/messages/", app=sse.handle_post_message),  # Legacy SSE
         ],
+        lifespan=lifespan,
     )
 
 
