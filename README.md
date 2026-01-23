@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/osomai-servicenow-mcp-badge.png)](https://mseep.ai/app/osomai-servicenow-mcp)
+
 # ServiceNow MCP Server
 
 A Model Completion Protocol (MCP) server implementation for ServiceNow, allowing Claude to interact with ServiceNow instances.
@@ -32,7 +34,7 @@ This project implements an MCP server that enables Claude to connect to ServiceN
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/servicenow-mcp.git
+   git clone https://github.com/echelon-ai-labs/servicenow-mcp.git
    cd servicenow-mcp
    ```
 
@@ -125,9 +127,46 @@ app = create_starlette_app(servicenow_mcp, debug=True)
 uvicorn.run(app, host="0.0.0.0", port=8080)
 ```
 
-### Available Tools
+## Tool Packaging (Optional)
 
-The ServiceNow MCP server provides the following tools:
+To manage the number of tools exposed to the language model (especially in environments with limits), the ServiceNow MCP server supports loading subsets of tools called "packages". This is controlled via the `MCP_TOOL_PACKAGE` environment variable.
+
+### Configuration
+
+1.  **Environment Variable:** Set the `MCP_TOOL_PACKAGE` environment variable to the name of the desired package.
+    ```bash
+    export MCP_TOOL_PACKAGE=catalog_builder
+    ```
+2.  **Package Definitions:** The available packages and the tools they include are defined in `config/tool_packages.yaml`. You can customize this file to create your own packages.
+
+### Behavior
+
+-   If `MCP_TOOL_PACKAGE` is set to a valid package name defined in `config/tool_packages.yaml`, only the tools listed in that package will be loaded.
+-   If `MCP_TOOL_PACKAGE` is **not set** or is empty, the `full` package (containing all tools) is loaded by default.
+-   If `MCP_TOOL_PACKAGE` is set to an invalid package name, the `none` package is loaded (no tools except `list_tool_packages`), and a warning is logged.
+-   Setting `MCP_TOOL_PACKAGE=none` explicitly loads no tools (except `list_tool_packages`).
+
+### Available Packages (Default)
+
+The default `config/tool_packages.yaml` includes the following role-based packages:
+
+-   `service_desk`: Tools for incident handling and basic user/knowledge lookup.
+-   `catalog_builder`: Tools for creating and managing service catalog items, categories, variables, and related scripting (UI Policies, User Criteria).
+-   `change_coordinator`: Tools for managing the change request lifecycle, including tasks and approvals.
+-   `knowledge_author`: Tools for creating and managing knowledge bases, categories, and articles.
+-   `platform_developer`: Tools for server-side scripting (Script Includes), workflow development, and deployment (Changesets).
+-   `system_administrator`: Tools for user/group management and viewing system logs.
+-   `agile_management`: Tools for managing user stories, epics, scrum tasks, and projects.
+-   `full`: Includes all available tools (default).
+-   `none`: Includes no tools (except `list_tool_packages`).
+
+### Introspection Tool
+
+-   **`list_tool_packages`**: Lists all available tool package names defined in the configuration and shows the currently loaded package. This tool is available in all packages except `none`.
+
+## Available Tools
+
+**Note:** The availability of the following tools depends on the loaded tool package (see Tool Packaging section above). By default (`full` package), all tools are available.
 
 #### Incident Management Tools
 
@@ -148,6 +187,7 @@ The ServiceNow MCP server provides the following tools:
 7. **create_catalog_item_variable** - Create a new variable (form field) for a catalog item
 8. **list_catalog_item_variables** - List all variables for a catalog item
 9. **update_catalog_item_variable** - Update an existing variable for a catalog item
+10. **list_catalogs** - List service catalogs from ServiceNow
 
 #### Catalog Optimization Tools
 
@@ -164,6 +204,30 @@ The ServiceNow MCP server provides the following tools:
 6. **submit_change_for_approval** - Submit a change request for approval
 7. **approve_change** - Approve a change request
 8. **reject_change** - Reject a change request
+
+#### Agile Management Tools
+
+##### Story Management
+1. **create_story** - Create a new user story in ServiceNow
+2. **update_story** - Update an existing user story in ServiceNow
+3. **list_stories** - List user stories with filtering options
+4. **create_story_dependency** - Create a dependency between two stories
+5. **delete_story_dependency** - Delete a dependency between stories
+
+##### Epic Management
+1. **create_epic** - Create a new epic in ServiceNow
+2. **update_epic** - Update an existing epic in ServiceNow
+3. **list_epics** - List epics from ServiceNow with filtering options
+
+##### Scrum Task Management
+1. **create_scrum_task** - Create a new scrum task in ServiceNow
+2. **update_scrum_task** - Update an existing scrum task in ServiceNow
+3. **list_scrum_tasks** - List scrum tasks from ServiceNow with filtering options
+
+##### Project Management
+1. **create_project** - Create a new project in ServiceNow
+2. **update_project** - Update an existing project in ServiceNow
+3. **list_projects** - List projects from ServiceNow with filtering options
 
 #### Workflow Management Tools
 
@@ -214,6 +278,11 @@ The ServiceNow MCP server provides the following tools:
 8. **remove_group_members** - Remove members from a group in ServiceNow
 9. **list_groups** - List groups with filtering options
 
+#### UI Policy Tools
+
+1. **create_ui_policy** - Creates a ServiceNow UI Policy, typically for a Catalog Item.
+2. **create_ui_policy_action** - Creates an action associated with a UI Policy to control variable states (visibility, mandatory, etc.).
+
 ### Using the MCP CLI
 
 The ServiceNow MCP server can be installed with the MCP CLI, which provides a convenient way to register the server with Claude.
@@ -255,7 +324,7 @@ To configure the ServiceNow MCP server in Claude Desktop:
 
 ### Example Usage with Claude
 
-Once the ServiceNow MCP server is configured with Claude Desktop, you can ask Claude to perform actions like:
+Below are some example natural language queries you can use with Claude to interact with ServiceNow via the MCP server:
 
 #### Incident Management Examples
 - "Create a new incident for a network outage in the east region"
@@ -263,6 +332,7 @@ Once the ServiceNow MCP server is configured with Claude Desktop, you can ask Cl
 - "Add a comment to incident INC0010001 saying the issue is being investigated"
 - "Resolve incident INC0010001 with a note that the server was restarted"
 - "List all high priority incidents assigned to the Network team"
+- "List all active P1 incidents assigned to the Network team."
 
 #### Service Catalog Examples
 - "Show me all items in the service catalog"
@@ -280,6 +350,11 @@ Once the ServiceNow MCP server is configured with Claude Desktop, you can ask Cl
 - "List all form fields for the VPN access request catalog item"
 - "Make the department field mandatory in the software request form"
 - "Update the help text for the cost center field"
+- "Show me all service catalogs in the system"
+- "List all hardware catalog items."
+- "Find the catalog item for 'New Laptop Request'."
+- "Show me the variables for the 'New Laptop Request' item."
+- "Create a new variable named 'department_code' for the 'New Hire Setup' catalog item. Make it a mandatory string field."
 
 #### Catalog Optimization Examples
 - "Analyze our service catalog and identify opportunities for improvement"
@@ -296,6 +371,24 @@ Once the ServiceNow MCP server is configured with Claude Desktop, you can ask Cl
 - "Approve the database upgrade change with comment: implementation plan looks thorough"
 - "Show me all emergency changes scheduled for this week"
 - "List all changes assigned to the Network team"
+- "Create a normal change request to upgrade the production database server."
+- "Update change CHG0012345, set the state to 'Implement'."
+
+#### Agile Management Examples
+- "Create a new user story for implementing a new reporting dashboard"
+- "Update the 'Implement a new reporting dashboard' story to set it as blocked"
+- "List all user stories assigned to the Data Analytics team"
+- "Create a dependency between the 'Implement a new reporting dashboard' story and the 'Develop data extraction pipeline' story"
+- "Delete the dependency between the 'Implement a new reporting dashboard' story and the 'Develop data extraction pipeline' story"
+- "Create a new epic called 'Data Analytics Initiatives'"
+- "Update the 'Data Analytics Initiatives' epic to set it as completed"
+- "List all epics in the 'Data Analytics' project"
+- "Create a new scrum task for the 'Implement a new reporting dashboard' story"
+- "Update the 'Develop data extraction pipeline' scrum task to set it as completed"
+- "List all scrum tasks in the 'Implement a new reporting dashboard' story"
+- "Create a new project called 'Data Analytics Initiatives'"
+- "Update the 'Data Analytics Initiatives' project to set it as completed"
+- "List all projects in the 'Data Analytics' epic"
 
 #### Workflow Management Examples
 - "Show me all active workflows in ServiceNow"
@@ -346,6 +439,11 @@ Once the ServiceNow MCP server is configured with Claude Desktop, you can ask Cl
 - "Find all active users in the system with 'doctor' in their title"
 - "Create a user that will act as an approver for the Radiology department"
 - "List all IT support groups in the system"
+
+#### UI Policy Examples
+- "Create a UI policy for the 'Software Request' item (sys_id: abc...) named 'Show Justification' that applies when 'software_cost' is greater than 100."
+- "For the UI policy 'Show Justification' (sys_id: def...), add an action to make the 'business_justification' variable visible and mandatory."
+- "Create another action for policy 'Show Justification' to hide the 'alternative_software' variable."
 
 ### Example Scripts
 
