@@ -23,7 +23,7 @@ from starlette.routing import Mount, Route
 from starlette.types import Receive, Scope, Send
 
 from servicenow_mcp.server import ServiceNowMCP
-from servicenow_mcp.utils.config import AuthConfig, AuthType, BasicAuthConfig, ServerConfig
+from servicenow_mcp.utils.config import AuthConfig, AuthType, BasicAuthConfig, OAuthConfig, ServerConfig
 
 
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
@@ -136,41 +136,47 @@ class ServiceNowSSEMCP(ServiceNowMCP):
         uvicorn.run(starlette_app, host=host, port=port)
 
 
-def create_servicenow_mcp(instance_url: str, username: str, password: str):
+def create_servicenow_mcp(
+    instance_url: str,
+    username: str,
+    password: str,
+    client_id: str = None,
+    client_secret: str = None,
+):
     """
     Create a ServiceNow MCP server with minimal configuration.
 
     This is a simplified factory function that creates a pre-configured
-    ServiceNow MCP server with basic authentication.
+    ServiceNow MCP server with basic authentication or OAuth.
 
     Args:
         instance_url: ServiceNow instance URL
         username: ServiceNow username
         password: ServiceNow password
+        client_id: ServiceNow Client ID (optional, for OAuth)
+        client_secret: ServiceNow Client Secret (optional, for OAuth)
 
     Returns:
         A configured ServiceNowMCP instance ready to use
-
-    Example:
-        ```python
-        from servicenow_mcp.server import create_servicenow_mcp
-
-        # Create an MCP server for ServiceNow
-        mcp = create_servicenow_mcp(
-            instance_url="https://instance.service-now.com",
-            username="admin",
-            password="password"
-        )
-
-        # Start the server
-        mcp.start()
-        ```
     """
 
-    # Create basic auth config
-    auth_config = AuthConfig(
-        type=AuthType.BASIC, basic=BasicAuthConfig(username=username, password=password)
-    )
+    if client_id and client_secret:
+        # Create OAuth config
+        auth_config = AuthConfig(
+            type=AuthType.OAUTH,
+            oauth=OAuthConfig(
+                client_id=client_id,
+                client_secret=client_secret,
+                username=username,
+                password=password,
+            ),
+        )
+    else:
+        # Create basic auth config
+        auth_config = AuthConfig(
+            type=AuthType.BASIC,
+            basic=BasicAuthConfig(username=username, password=password),
+        )
 
     # Create server config
     config = ServerConfig(instance_url=instance_url, auth=auth_config)
@@ -192,6 +198,8 @@ def main():
         instance_url=os.getenv("SERVICENOW_INSTANCE_URL"),
         username=os.getenv("SERVICENOW_USERNAME"),
         password=os.getenv("SERVICENOW_PASSWORD"),
+        client_id=os.getenv("SERVICENOW_CLIENT_ID"),
+        client_secret=os.getenv("SERVICENOW_CLIENT_SECRET"),
     )
     server.start(host=args.host, port=args.port)
 
